@@ -2,8 +2,7 @@
 const { logAction } = require('../helpers/audit.helper');
 const pool = require('../db/database');
 const ExcelJS = require('exceljs');
-const { jsPDF } = require("jspdf");
-const autoTable = require('jspdf-autotable');
+// Nota: jspdf y jspdf-autotable no se usan en este archivo, se pueden remover si no se usan en otro lado.
 
 const getFinancialLedger = async (req, res) => {
     const { page = 1, limit = 15, startDate, endDate, search = '' } = req.query;
@@ -12,13 +11,15 @@ const getFinancialLedger = async (req, res) => {
     let baseQuery = 'FROM financial_ledger';
     const conditions = [];
     const params = [];
+    let paramIndex = 1; // Contador para los placeholders de PostgreSQL
 
+    // --- CORRECCIÓN: Se construyen los placeholders dinámicamente ($1, $2, etc.) ---
     if (startDate && endDate) {
-        conditions.push('entry_date BETWEEN ? AND ?');
+        conditions.push(`entry_date BETWEEN $${paramIndex++} AND $${paramIndex++}`);
         params.push(`${startDate} 00:00:00`, `${endDate} 23:59:59`);
     }
     if (search) {
-        conditions.push('concept LIKE ?');
+        conditions.push(`concept ILIKE $${paramIndex++}`);
         params.push(`%${search}%`);
     }
     if (conditions.length > 0) {
@@ -26,19 +27,19 @@ const getFinancialLedger = async (req, res) => {
     }
     
     try {
-        // --- INICIO DE LA CORRECCIÓN ---
-        // Se añade "id DESC" como segundo criterio de ordenamiento para desempatar registros con la misma fecha.
-        const [entries] = await pool.query(
-            `SELECT * ${baseQuery} ORDER BY entry_date DESC, id DESC LIMIT ? OFFSET ?`, 
-            [...params, parseInt(limit), parseInt(offset)]
+        const queryParams = [...params, parseInt(limit), parseInt(offset)];
+        // --- CORRECCIÓN: Se usan los nuevos placeholders y se obtiene el resultado con { rows } ---
+        const { rows: entries } = await pool.query(
+            `SELECT * ${baseQuery} ORDER BY entry_date DESC, id DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`, 
+            queryParams
         );
-        // --- FIN DE LA CORRECCIÓN ---
 
-        const [[{ total }]] = await pool.query(`SELECT COUNT(*) as total ${baseQuery}`, params);
-        const [[summary]] = await pool.query(`
+        const { rows: [{ total }] } = await pool.query(`SELECT COUNT(*) as total ${baseQuery}`, params);
+        
+        const { rows: [summary] } = await pool.query(`
             SELECT
-                SUM(income) as totalIncome,
-                SUM(expense) as totalExpense
+                COALESCE(SUM(income), 0) as "totalIncome",
+                COALESCE(SUM(expense), 0) as "totalExpense"
             ${baseQuery}
         `, params);
 
@@ -60,18 +61,16 @@ const getFinancialLedger = async (req, res) => {
 
 const createFinancialEntry = async (req, res) => {
     const { entry_date, concept, income, expense } = req.body;
-    // CORRECCIÓN FINAL: Se usa req.uid, que es lo que provee tu middleware 'validateJWT'
     const userId = req.uid; 
 
     try {
+        // --- CORRECCIÓN: Se usan placeholders $1, $2, etc. ---
         await pool.query(
-            'INSERT INTO financial_ledger (entry_date, concept, income, expense) VALUES (?, ?, ?, ?)',
+            'INSERT INTO financial_ledger (entry_date, concept, income, expense) VALUES ($1, $2, $3, $4)',
             [entry_date, concept || null, income || 0, expense || 0]
         );
 
-        // Lógica de Auditoría
         let actionDetails = '';
-
         if (income > 0) {
             actionDetails = `Se registró un INGRESO por "${concept}" por un monto de ${income}.`;
         } else if (expense > 0) {
@@ -85,17 +84,14 @@ const createFinancialEntry = async (req, res) => {
         res.status(201).json({ msg: 'Entrada contable creada' });
     } catch (error) {
         console.error("Error al registrar movimiento:", error);
-        const errorMsg = error.response?.data?.errors?.[0]?.msg || error.response?.data?.msg || 'No se pudo registrar el movimiento.';
-        res.status(500).json({ msg: errorMsg });
+        res.status(500).json({ msg: 'No se pudo registrar el movimiento.' });
     }
 };
 
 const exportLedgerToExcel = async (req, res) => {
     try {
-        // --- INICIO DE LA CORRECCIÓN ---
-        // Se aplica el mismo ordenamiento (entry_date DESC, id DESC) para que el reporte sea consistente.
-        const [ledgerData] = await pool.query('SELECT * FROM financial_ledger ORDER BY entry_date DESC, id DESC');
-        // --- FIN DE LA CORRECCIÓN ---
+        // --- CORRECCIÓN: Se obtiene el resultado con { rows } ---
+        const { rows: ledgerData } = await pool.query('SELECT * FROM financial_ledger ORDER BY entry_date DESC, id DESC');
 
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Reporte Financiero');
