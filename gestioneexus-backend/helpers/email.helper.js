@@ -2,22 +2,23 @@ const nodemailer = require('nodemailer');
 
 const sendPasswordResetEmail = async (userEmail, token) => {
     try {
-        const testAccount = await nodemailer.createTestAccount();
-
+        // --- CORRECCIÓN: Configuración para un servicio de correo real (ej. Gmail) ---
+        // Estas credenciales se leerán desde las variables de entorno en Render.
         const transporter = nodemailer.createTransport({
-            host: 'smtp.ethereal.email',
-            port: 587,
-            secure: false,
+            host: "smtp.gmail.com",
+            port: 465,
+            secure: true, // true para el puerto 465
             auth: {
-                user: testAccount.user,
-                pass: testAccount.pass,
+                user: process.env.EMAIL_USER, // Tu correo de envío
+                pass: process.env.EMAIL_PASS, // Tu contraseña de aplicación
             },
         });
 
-        const resetLink = `http://localhost:5173/reset-password/${token}`;
+        // --- CORRECCIÓN: Se usa una variable de entorno para la URL del frontend ---
+        const resetLink = `${process.env.FRONTEND_URL}/reset-password/${token}`;
 
         const mailOptions = {
-            from: '"GestioNexus" <soporte@gestioneexus.com>',
+            from: `"GestioNexus" <${process.env.EMAIL_USER}>`,
             to: userEmail,
             subject: 'Recuperación de Contraseña',
             html: `
@@ -30,11 +31,11 @@ const sendPasswordResetEmail = async (userEmail, token) => {
             `,
         };
 
-        const info = await transporter.sendMail(mailOptions);
-        console.log('Correo de prueba enviado. URL para previsualizarlo: %s', nodemailer.getTestMessageUrl(info));
+        await transporter.sendMail(mailOptions);
+        console.log(`Correo de recuperación enviado a: ${userEmail}`);
 
     } catch (error) {
-        console.error('Error al enviar correo de prueba:', error);
+        console.error('Error al enviar el correo de recuperación:', error);
         throw new Error('No se pudo enviar el correo de recuperación.');
     }
 };

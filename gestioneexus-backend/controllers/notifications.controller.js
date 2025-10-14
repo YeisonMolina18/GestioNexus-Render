@@ -3,7 +3,9 @@ const pool = require('../db/database');
 // Esta función es un helper para no repetir el código de buscar notificaciones
 const fetchAllNotifications = async () => {
     const notifications = [];
-    const [lowStockProducts] = await pool.query('SELECT name, quantity FROM products WHERE quantity < 3 AND is_active = TRUE');
+    
+    // --- CORRECCIÓN: Se usa { rows } y se ajusta la sintaxis ---
+    const { rows: lowStockProducts } = await pool.query('SELECT name, quantity FROM products WHERE quantity < 3 AND is_active = TRUE');
     lowStockProducts.forEach(p => {
         notifications.push({
             id: `stock-${p.name.replace(/\s/g, '-')}`,
@@ -12,8 +14,9 @@ const fetchAllNotifications = async () => {
         });
     });
 
-    const [overduePlans] = await pool.query(
-        "SELECT id, customer_name FROM layaway_plans WHERE deadline < CURDATE() AND status = 'active'"
+    // --- CORRECCIÓN: Se usa CURRENT_DATE para PostgreSQL ---
+    const { rows: overduePlans } = await pool.query(
+        "SELECT id, customer_name FROM layaway_plans WHERE deadline < CURRENT_DATE AND status = 'active'"
     );
     overduePlans.forEach(p => {
         notifications.push({
@@ -23,8 +26,9 @@ const fetchAllNotifications = async () => {
         });
     });
 
-    const [dueSoonPlans] = await pool.query(
-        "SELECT id, customer_name, deadline FROM layaway_plans WHERE deadline BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 3 DAY) AND status = 'active'"
+    // --- CORRECCIÓN: Se usa la sintaxis de intervalos de PostgreSQL ---
+    const { rows: dueSoonPlans } = await pool.query(
+        "SELECT id, customer_name, deadline FROM layaway_plans WHERE deadline BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '3 day' AND status = 'active'"
     );
     dueSoonPlans.forEach(p => {
         const formattedDate = new Date(p.deadline);
@@ -48,11 +52,9 @@ const getNotifications = async (req, res) => {
     }
 };
 
-// --- NUEVA FUNCIÓN PARA VERIFICAR SI HAY NOTIFICACIONES ---
 const getNotificationStatus = async (req, res) => {
     try {
         const notifications = await fetchAllNotifications();
-        // Solo devolvemos si la cantidad es mayor a cero
         res.json({ hasUnread: notifications.length > 0 });
     } catch (error) {
         console.error("Error al verificar estado de notificaciones:", error);
@@ -60,12 +62,7 @@ const getNotificationStatus = async (req, res) => {
     }
 };
 
-// --- NUEVA FUNCIÓN PARA MARCAR COMO LEÍDAS ---
-// En nuestro caso, como las notificaciones se generan al momento, no necesitamos
-// cambiar nada en la BD. Esta función simplemente existe para que el frontend
-// la llame y sepa que el usuario ya las vio.
 const markNotificationsAsRead = (req, res) => {
-    // No se necesita lógica aquí por ahora, solo confirmar que la acción se recibió.
     res.status(200).json({ msg: 'Notificaciones marcadas como leídas.' });
 };
 
