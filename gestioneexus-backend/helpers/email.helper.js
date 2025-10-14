@@ -2,19 +2,27 @@ const nodemailer = require('nodemailer');
 
 const sendPasswordResetEmail = async (userEmail, token) => {
     try {
-        // --- CORRECCIÓN: Configuración para un servicio de correo real (ej. Gmail) ---
-        // Estas credenciales se leerán desde las variables de entorno en Render.
+        // --- INICIO DE DIAGNÓSTICO ---
+        // Vamos a imprimir las variables en los logs de Render para asegurarnos de que se están leyendo bien.
+        console.log('--- Intentando enviar correo ---');
+        console.log('Usuario de correo leído desde variables:', process.env.EMAIL_USER);
+        // No imprimimos la contraseña por seguridad, pero si el usuario está mal, la contraseña también lo estará.
+        // --- FIN DE DIAGNÓSTICO ---
+
         const transporter = nodemailer.createTransport({
             host: "smtp.gmail.com",
             port: 465,
-            secure: true, // true para el puerto 465
+            secure: true,
             auth: {
-                user: process.env.EMAIL_USER, // Tu correo de envío
-                pass: process.env.EMAIL_PASS, // Tu contraseña de aplicación
+                user: process.env.EMAIL_USER,
+                pass: process.env.EMAIL_PASS,
             },
+            // --- OPCIÓN DE DEPURACIÓN ---
+            // Esto nos dará logs más detallados del intento de conexión.
+            logger: true,
+            debug: true 
         });
 
-        // --- CORRECCIÓN: Se usa una variable de entorno para la URL del frontend ---
         const resetLink = `${process.env.FRONTEND_URL}/reset-password/${token}`;
 
         const mailOptions = {
@@ -31,11 +39,12 @@ const sendPasswordResetEmail = async (userEmail, token) => {
             `,
         };
 
+        console.log('Enviando correo a:', userEmail);
         await transporter.sendMail(mailOptions);
-        console.log(`Correo de recuperación enviado a: ${userEmail}`);
+        console.log(`Correo de recuperación enviado exitosamente a: ${userEmail}`);
 
     } catch (error) {
-        console.error('Error al enviar el correo de recuperación:', error);
+        console.error('Error detallado al enviar el correo de recuperación:', error);
         throw new Error('No se pudo enviar el correo de recuperación.');
     }
 };
