@@ -1,141 +1,53 @@
 const pool = require('../db/database');
-const { logAction } = require('../helpers/audit.helper');
 
-const getSales = async (req, res) => {
-    // Se usan nombres de variables en inglés consistentes (page, limit, userId, etc.)
-    const { page = 1, limit = 15, userId, startDate, endDate } = req.query;
-    const offset = (page - 1) * limit;
-
+const getDashboardStats = async (req, res) => {
     try {
-        let params = [];
-        let whereConditions = [];
-        let paramIndex = 1; // Contador para los placeholders de PostgreSQL
+        // Conteo total de productos activos
+        const { rows: productRows } = await pool.query('SELECT COUNT(*) AS "productCount" FROM products WHERE is_active = TRUE');
+        const productCount = productRows[0].productCount;
 
-        // Se construyen los placeholders dinámicamente ($1, $2, etc.)
-        if (userId) {
-            whereConditions.push(`s.user_id = $${paramIndex++}`);
-            params.push(userId);
-        }
-        if (startDate && endDate) {
-            whereConditions.push(`s.created_at BETWEEN $${paramIndex++} AND $${paramIndex++}`);
-            params.push(`${startDate} 00:00:00`, `${endDate} 23:59:59`);
-        }
+        // Conteo total de ventas
+        const { rows: salesRows } = await pool.query('SELECT COUNT(*) AS "salesCount" FROM sales');
+        const salesCount = salesRows[0].salesCount;
 
-        const whereClause = whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : '';
+        // Conteo total de usuarios activos
+        const { rows: userRows } = await pool.query('SELECT COUNT(*) AS "userCount" FROM users WHERE is_active = TRUE');
+        const userCount = userRows[0].userCount;
 
-        const baseQuery = `
-            FROM sales s
-            JOIN users u ON s.user_id = u.id
-            LEFT JOIN sale_details sd ON s.id = sd.sale_id
-            ${whereClause}
-        `;
-        
-        // Consulta para obtener los datos de la página actual
-        const salesParams = [...params, parseInt(limit), parseInt(offset)];
-        const { rows: sales } = await pool.query(`
-            SELECT s.id, s.total_amount, s.discount, s.created_at, u.full_name as user_name,
-                   COALESCE(SUM(sd.quantity * sd.unit_cost), 0) as total_cost
-            ${baseQuery}
-            GROUP BY s.id, u.full_name
-            ORDER BY s.created_at DESC
-            LIMIT $${paramIndex++} OFFSET $${paramIndex++}
-        `, salesParams);
-
-        // Consulta para obtener el conteo total
-        const { rows: totalRows } = await pool.query(`SELECT COUNT(DISTINCT s.id) as total FROM sales s ${whereClause}`, params);
-        const total = totalRows[0].total;
-
-        res.json({
-            sales,
-            totalPages: Math.ceil(total / limit),
-            currentPage: parseInt(page)
-        });
-    } catch (error) {
-        console.error("Error al obtener las ventas:", error);
-        res.status(500).json({ msg: 'Error al obtener las ventas' });
-    }
-};
-
-const getSaleById = async (req, res) => {
-    const { id } = req.params;
-    try {
-        // Se usa $1 y se desestructura el resultado correctamente
-        const { rows: [sale] } = await pool.query(`
-            SELECT s.id, s.total_amount, s.discount, s.created_at, u.full_name as user_name
-            FROM sales s
-            JOIN users u ON s.user_id = u.id
-            WHERE s.id = $1
-        `, [id]);
-
-        if (!sale) {
-            return res.status(404).json({ msg: 'Venta no encontrada' });
-        }
-
-        const { rows: details } = await pool.query(`
-            SELECT sd.quantity, sd.unit_price, sd.unit_cost, p.name as product_name, p.sizes as product_size
+        // Productos más vendidos (Top 5)
+        const { rows: topProducts } = await pool.query(`
+            SELECT p.name, p.quantity as stock, SUM(sd.quantity) as "totalSold"
             FROM sale_details sd
             JOIN products p ON sd.product_id = p.id
-            WHERE sd.sale_id = $1
-        `, [id]);
+            GROUP BY p.id, p.name, p.quantity
+            ORDER BY "totalSold" DESC
+            LIMIT 5;
+        `);
 
-        res.json({ ...sale, details });
+        // Últimas ventas (Top 5)
+        const { rows: recentSales } = await pool.query(`
+            SELECT p.name as "productName", s.created_at, (sd.quantity * sd.unit_price) as "saleTotal"
+            FROM sale_details sd
+            JOIN sales s ON sd.sale_id = s.id
+            JOIN products p ON sd.product_id = p.id
+            ORDER BY s.created_at DESC
+            LIMIT 5;
+        `);
+
+        res.json({
+            userCount: userCount,
+            productCount: productCount,
+            salesCount: salesCount,
+            topProducts,
+            recentSales
+        });
+
     } catch (error) {
-        console.error("Error al obtener el detalle de la venta:", error);
-        res.status(500).json({ msg: 'Error al obtener el detalle de la venta' });
+        console.error("Error fetching dashboard stats:", error);
+        res.status(500).json({ msg: 'Error al obtener las estadísticas del dashboard' });
     }
 };
 
-const createSale = async (req, res) => {
-    const { total_amount, products, discount = 0 } = req.body;
-    const userId = req.uid;
-    // Manejo de transacciones para 'pg'
-    const client = await pool.connect();
-
-    try {
-        await client.query('BEGIN'); // Iniciar transacción
-
-        for (const product of products) {
-            const { rows: [dbProduct] } = await client.query('SELECT quantity, name, cost FROM products WHERE id = $1 FOR UPDATE', [product.product_id]);
-            if (!dbProduct || dbProduct.quantity < product.quantity) {
-                await client.query('ROLLBACK'); // Deshacer si no hay stock
-                return res.status(400).json({ msg: `Stock insuficiente para: ${dbProduct?.name || 'producto desconocido'}` });
-            }
-            product.cost = dbProduct.cost;
-        }
-
-        const saleResult = await client.query(
-            'INSERT INTO sales (user_id, total_amount, discount) VALUES ($1, $2, $3) RETURNING id',
-            [userId, total_amount, discount]
-        );
-        const saleId = saleResult.rows[0].id;
-
-        for (const product of products) {
-            await client.query(
-                'INSERT INTO sale_details (sale_id, product_id, quantity, unit_price, unit_cost) VALUES ($1, $2, $3, $4, $5)',
-                [saleId, product.product_id, product.quantity, product.unit_price, product.cost]
-            );
-        }
-
-        const finalAmountWithDiscount = total_amount * (1 - (discount / 100));
-        // Se cambia CURDATE() por CURRENT_DATE
-        await client.query(
-            'INSERT INTO financial_ledger (entry_date, concept, income) VALUES (CURRENT_DATE, $1, $2)',
-            [`Venta (ID: ${saleId}) con ${discount}% desc.`, finalAmountWithDiscount]
-        );
-        
-        await client.query('COMMIT'); // Confirmar transacción
-        
-        await logAction(userId, `Registró una venta (ID: ${saleId}) por un total de ${total_amount} con ${discount}% de descuento.`);
-
-        res.status(201).json({ msg: 'Venta creada exitosamente', saleId });
-
-    } catch (error) {
-        await client.query('ROLLBACK'); // Deshacer en caso de cualquier error
-        console.error("Error al crear la venta:", error);
-        res.status(500).json({ msg: 'Error al procesar la venta' });
-    } finally {
-        client.release(); // Liberar la conexión al pool
-    }
+module.exports = {
+    getDashboardStats
 };
-
-module.exports = { getSales, getSaleById, createSale };
