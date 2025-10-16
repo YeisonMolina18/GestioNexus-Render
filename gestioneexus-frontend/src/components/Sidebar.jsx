@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import Swal from 'sweetalert2';
 
-// --- Iconos ---
+// --- Iconos (sin cambios) ---
 const DashboardIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-3" viewBox="0 0 20 20" fill="currentColor"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" /></svg>;
 const UserIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-3" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" /></svg>;
 const VentasIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-3" viewBox="0 0 20 20" fill="currentColor"><path d="M3 1a1 1 0 000 2h1.22l.305 1.222a.997.997 0 00.01.042l1.358 5.43-.893.892C3.74 11.846 4.632 14 6.414 14H15a1 1 0 000-2H6.414l1-1H14a1 1 0 00.894-.553l3-6A1 1 0 0017 3H7.118l-.38-1.516A1 1 0 005.74.5H3zM6.38 6h7.392l-2.25 4.5H8.518L6.38 6z" /><path d="M10 18a2 2 0 11-4 0 2 2 0 014 0zM18 18a2 2 0 11-4 0 2 2 0 014 0z" /></svg>;
@@ -34,6 +34,18 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
 
     const getLinkClass = ({ isActive }) => `${linkStyles} ${isActive ? activeLinkStyles : inactiveLinkStyles}`;
 
+    // --- ¡AQUÍ ESTÁ LA LÓGICA CORREGIDA! ---
+    let imageUrl = '';
+    if (user?.profilePictureUrl) {
+        // Si la URL es absoluta (de Cloudinary), la usamos directamente.
+        if (user.profilePictureUrl.startsWith('http')) {
+            imageUrl = user.profilePictureUrl;
+        } else {
+            // Si es una ruta relativa (imágenes antiguas), construimos la URL completa.
+            imageUrl = `${backendUrl}${user.profilePictureUrl}`;
+        }
+    }
+
     return (
         <div className={`fixed inset-y-0 left-0 bg-[#5D1227] text-white flex flex-col h-full shadow-lg z-30 transform transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'} w-64`}>
             <div className="p-6 text-center flex justify-between items-center lg:justify-center">
@@ -48,29 +60,30 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
             
             <div className="px-6 py-4 flex items-center justify-start">
                 <div className="w-10 h-10 rounded-full flex-shrink-0 mr-4 bg-yellow-400 flex items-center justify-center overflow-hidden">
-                    {user?.profilePictureUrl ? (
-                        <img src={`${backendUrl}${user.profilePictureUrl}`} alt="Avatar" className="w-full h-full object-cover" />
+                    {/* Se usa la nueva variable 'imageUrl' para mostrar la foto */}
+                    {imageUrl ? (
+                        <img src={imageUrl} alt="Avatar" className="w-full h-full object-cover" />
                     ) : (
                         <span className="text-xl font-bold text-[#5D1227]">
-                            {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                            {/* Se usa 'fullName' para consistencia */}
+                            {user?.fullName ? user.fullName.charAt(0).toUpperCase() : 'U'}
                         </span>
                     )}
                 </div>
                 <div className="text-left">
                     <p className="text-sm">BIENVENIDO</p>
-                    <p className="font-semibold text-lg">{user?.name || 'Usuario'}</p>
+                    {/* Se usa 'fullName' para consistencia */}
+                    <p className="font-semibold text-lg">{user?.fullName || 'Usuario'}</p>
                 </div>
             </div>
 
-            {/* --- NAVEGACIÓN REORDENADA --- */}
+            {/* --- NAVEGACIÓN (sin cambios) --- */}
             <nav className="flex-1 mt-6 space-y-2 overflow-y-auto">
-                {/* Grupo Principal */}
                 <NavLink to="/dashboard" className={getLinkClass}><DashboardIcon /> Dashboard</NavLink>
                 <NavLink to="/sales" className={getLinkClass}><VentasIcon /> Ventas</NavLink>
                 <NavLink to="/layaway" className={getLinkClass}><PlanSepareIcon /> Plan separe</NavLink>
                 <NavLink to="/products" className={getLinkClass}><ProductosIcon /> Productos</NavLink>
 
-                {/* Grupo de Admin */}
                 {user?.role === 'admin' && (
                     <>
                         <hr className="border-white border-opacity-20 my-4 mx-4" />

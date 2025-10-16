@@ -3,7 +3,6 @@ import { AuthContext } from '../context/AuthContext';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import NotificationDropdown from './NotificationDropdown';
 import Swal from 'sweetalert2';
-import api from '../api/api';
 
 const Header = ({ searchTerm, setSearchTerm, toggleSidebar, showGlobalSearch }) => {
     const { user, logout, hasUnreadNotifications, markNotificationsAsRead } = useContext(AuthContext);
@@ -42,6 +41,18 @@ const Header = ({ searchTerm, setSearchTerm, toggleSidebar, showGlobalSearch }) 
         }).then((result) => { if (result.isConfirmed) { logout(); navigate('/login'); } });
     };
 
+    // --- ¡AQUÍ ESTÁ LA LÓGICA CORREGIDA! ---
+    let imageUrl = '';
+    if (user?.profilePictureUrl) {
+        // Si la URL es absoluta (de Cloudinary), la usamos directamente.
+        if (user.profilePictureUrl.startsWith('http')) {
+            imageUrl = user.profilePictureUrl;
+        } else {
+            // Si es una ruta relativa (imágenes antiguas), construimos la URL completa.
+            imageUrl = `${backendUrl}${user.profilePictureUrl}`;
+        }
+    }
+
     return (
         <header className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -51,7 +62,7 @@ const Header = ({ searchTerm, setSearchTerm, toggleSidebar, showGlobalSearch }) 
                 <div>
                     {location.pathname === '/dashboard' && (
                         <>
-                            <h1 className="text-xl md:text-2xl font-bold text-gray-800">Bienvenido de nuevo, {user?.name ? user.name.split(' ')[0] : ''}!</h1>
+                            <h1 className="text-xl md:text-2xl font-bold text-gray-800">Bienvenido de nuevo, {user?.fullName ? user.fullName.split(' ')[0] : ''}!</h1>
                             <p className="text-gray-500 text-sm md:text-base">Aquí tienes el resumen de tu negocio.</p>
                         </>
                     )}
@@ -78,15 +89,15 @@ const Header = ({ searchTerm, setSearchTerm, toggleSidebar, showGlobalSearch }) 
                             </span>
                         )}
                     </button>
-                    {/* --- CORRECCIÓN AQUÍ: Pasamos la función para limpiar --- */}
                     <NotificationDropdown isOpen={notifOpen} onClear={markNotificationsAsRead} />
                 </div>
 
                 <div className="relative" ref={profileRef}>
                     <button onClick={() => setProfileOpen(!profileOpen)} className="w-10 h-10 bg-[#5D1227] rounded-full flex items-center justify-center text-white font-bold cursor-pointer overflow-hidden">
-                        {user?.profilePictureUrl ? (
-                            <img src={`${backendUrl}${user.profilePictureUrl}`} alt="Perfil" className="w-full h-full object-cover" />
-                        ) : ( user?.name ? user.name.charAt(0).toUpperCase() : '' )}
+                        {/* Se usa la nueva variable 'imageUrl' para mostrar la foto */}
+                        {imageUrl ? (
+                            <img src={imageUrl} alt="Perfil" className="w-full h-full object-cover" />
+                        ) : ( user?.fullName ? user.fullName.charAt(0).toUpperCase() : '' )}
                     </button>
                     {profileOpen && (
                         <div className="absolute top-14 right-0 w-48 bg-white rounded-lg shadow-xl border z-50 py-1">
