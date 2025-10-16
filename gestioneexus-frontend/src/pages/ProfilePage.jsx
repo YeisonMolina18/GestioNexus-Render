@@ -6,7 +6,6 @@ import ChangePasswordModal from '../components/ChangePasswordModal';
 import Swal from 'sweetalert2';
 
 const ProfilePage = () => {
-    // Ahora usamos 'setUser' que es nuestra nueva función 'updateUserContext'
     const { user, setUser } = useContext(AuthContext);
     const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
     const fileInputRef = useRef(null);
@@ -30,8 +29,7 @@ const ProfilePage = () => {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
 
-            // --- CORRECCIÓN AQUÍ ---
-            // Usamos la función del contexto para actualizar el usuario de forma segura
+            // Actualizamos el usuario en el contexto con la nueva URL de la foto
             setUser({ profilePictureUrl: data.profilePictureUrl });
 
             Swal.fire('¡Éxito!', data.msg, 'success');
@@ -42,6 +40,18 @@ const ProfilePage = () => {
     
     const backendUrl = import.meta.env.VITE_BACKEND_URL;
 
+    // --- ¡AQUÍ ESTÁ LA LÓGICA CORREGIDA! ---
+    let imageUrl = '';
+    if (user.profilePictureUrl) {
+        // Si la URL ya es completa (de Cloudinary), la usamos directamente.
+        if (user.profilePictureUrl.startsWith('http')) {
+            imageUrl = user.profilePictureUrl;
+        } else {
+            // Si es una ruta antigua (del servidor de Render), construimos la URL.
+            imageUrl = `${backendUrl}${user.profilePictureUrl}`;
+        }
+    }
+
     return (
         <>
             <div className="bg-white p-8 rounded-lg shadow-lg max-w-2xl mx-auto">
@@ -50,9 +60,10 @@ const ProfilePage = () => {
                     <div className="flex-shrink-0 text-center">
                         <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/png, image/jpeg, image/webp" />
                         
-                        {/* --- CORRECCIÓN AQUÍ: Aseguramos que la URL se construya siempre --- */}
-                        {user.profilePictureUrl ? (
-                            <img src={`${backendUrl}${user.profilePictureUrl}?${new Date().getTime()}`} alt="Foto de perfil" className="w-32 h-32 rounded-full object-cover mx-auto shadow-md" />
+                        {/* Se usa la nueva variable 'imageUrl' para mostrar la foto */}
+                        {imageUrl ? (
+                            // Se añade `key` con la fecha para forzar la recarga de la imagen al cambiarla
+                            <img key={Date.now()} src={imageUrl} alt="Foto de perfil" className="w-32 h-32 rounded-full object-cover mx-auto shadow-md" />
                         ) : (
                             <div className="w-32 h-32 bg-[#5D1227] rounded-full flex items-center justify-center text-white text-5xl font-bold mx-auto shadow-md">
                                 {user.fullName ? user.fullName.charAt(0).toUpperCase() : '?'}
