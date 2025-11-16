@@ -248,7 +248,7 @@ const SalesPage = () => {
             >
                 <div className="space-y-3">
                     <p>Este producto está disponible en varias tallas. Por favor, elige cuál deseas agregar a la venta.</p>
-                    <div className="flex flex-col space-y-2 pt-4">
+                    <div className="flex flex-col space-y-2 pt-4 max-h-96 overflow-y-auto pr-2">
                         {variantOptions.map(variant => (
                             <button
                                 key={variant.id}
@@ -257,8 +257,16 @@ const SalesPage = () => {
                                 className="w-full text-left p-3 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:bg-red-50 disabled:cursor-not-allowed"
                             >
                                 <div className="flex justify-between items-center">
-                                    <span className="font-semibold">Talla: {variant.sizes}</span>
-                                    <span className={`text-sm ${variant.quantity > 0 ? 'text-gray-500' : 'text-red-500 font-bold'}`}>
+                                    <div>
+                                        <span className="font-semibold text-base">Talla: {variant.sizes}</span>
+                                        <div className="text-sm text-gray-500 mt-1">
+                                            <span>{variant.brand}</span> | <span>{variant.category}</span>
+                                        </div>
+                                        <div className="text-sm text-gray-500 mt-1">
+                                            <span className="font-medium">Venta: {formatCurrency(variant.price)}</span>
+                                        </div>
+                                    </div>
+                                    <span className={`text-lg ${variant.quantity > 0 ? 'text-gray-600' : 'text-red-500 font-bold'}`}>
                                         Stock: {variant.quantity}
                                     </span>
                                 </div>

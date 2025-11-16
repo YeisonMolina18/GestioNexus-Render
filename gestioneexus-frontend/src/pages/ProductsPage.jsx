@@ -6,6 +6,8 @@ import ProductForm from '../components/ProductForm';
 import Pagination from '../components/Pagination';
 import Swal from 'sweetalert2';
 import * as XLSX from 'xlsx';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const ProductsPage = () => {
     const { searchTerm } = useOutletContext(); 
@@ -148,6 +150,96 @@ const ProductsPage = () => {
         });
     };
 
+    const handleGenerateReport = async () => {
+        const { value: format } = await Swal.fire({
+            title: 'Exportar Inventario',
+            text: '¿En qué formato deseas exportar el inventario?',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'PDF',
+            showDenyButton: true,
+            denyButtonText: 'Excel',
+            confirmButtonColor: '#D33',
+            denyButtonColor: '#16A34A',
+            cancelButtonText: 'Cancelar'
+        });
+
+        if (format) { // PDF
+            generatePdf();
+        } else if (format === false) { // Excel
+            downloadExcel();
+        }
+    };
+
+    const generatePdf = async () => {
+        try {
+            const { data } = await api.get('/products', { params: { limit: 10000 } });
+            const allProducts = data.products;
+
+            if (allProducts.length === 0) {
+                Swal.fire('Vacío', 'No hay productos para generar el reporte.', 'info');
+                return;
+            }
+
+            const doc = new jsPDF();
+            doc.setFontSize(18);
+            doc.text("Inventario de Productos - Variedades Cinthya", 14, 22);
+            
+            const tableColumn = ["Nombre", "Marca", "Categoría", "Tallas", "Referencia", "Cantidad", "Precio"];
+            const tableRows = allProducts.map(product => [
+                product.name,
+                product.brand,
+                product.category,
+                product.sizes,
+                product.reference,
+                product.quantity,
+                new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(product.price)
+            ]);
+
+            autoTable(doc, {
+                head: [tableColumn],
+                body: tableRows,
+                startY: 30,
+                headStyles: { fillColor: [93, 18, 39] },
+            });
+
+            doc.save(`inventario-productos-${new Date().toISOString().slice(0,10)}.pdf`);
+        } catch (error) {
+            Swal.fire('Error', 'No se pudieron obtener los datos para el PDF.', 'error');
+        }
+    };
+
+    const downloadExcel = async () => {
+        try {
+            const { data } = await api.get('/products', { params: { limit: 10000 } });
+            const allProducts = data.products;
+
+            if (allProducts.length === 0) {
+                Swal.fire('Vacío', 'No hay productos para generar el reporte.', 'info');
+                return;
+            }
+
+            const worksheet = XLSX.utils.json_to_sheet(allProducts.map(p => ({
+                NOMBRE: p.name,
+                MARCA: p.brand,
+                CATEGORIA: p.category,
+                TALLAS: p.sizes,
+                REFERENCIA: p.reference,
+                CANTIDAD: p.quantity,
+                PRECIO: p.price,
+                COSTO: p.cost
+            })));
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Productos");
+
+            XLSX.writeFile(workbook, `inventario-productos-${new Date().toISOString().slice(0, 10)}.xlsx`);
+
+        } catch (error) {
+            console.error(error);
+            Swal.fire('Error', 'No se pudo generar el reporte en Excel.', 'error');
+        }
+    };
+
     return (
         <div className="space-y-6">
             {/* --- CAMBIO PARA RESPONSIVIDAD AQUÍ --- */}
@@ -169,6 +261,12 @@ const ProductsPage = () => {
                         className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors shadow-md"
                     >
                         Importar Productos
+                    </button>
+                    <button
+                        onClick={handleGenerateReport}
+                        className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg transition-colors shadow-md"
+                    >
+                        Exportar
                     </button>
                     <button 
                         onClick={openModalForCreate} 
